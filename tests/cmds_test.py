@@ -101,7 +101,7 @@ def inject(*paths):
 
 inject("brun")
 inject("edge-cases")
-inject("unknown-op")
+#inject("unknown-op")
 
 
 def main():

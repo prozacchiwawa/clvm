@@ -179,6 +179,8 @@ QUOTE_ATOM = KEYWORD_TO_ATOM["q"]
 APPLY_ATOM = KEYWORD_TO_ATOM["a"]
 
 OPERATOR_LOOKUP = OperatorDict(
-    operators_for_module(KEYWORD_TO_ATOM, core_ops, OP_REWRITE), quote=QUOTE_ATOM, apply=APPLY_ATOM
+    operators_for_module(KEYWORD_TO_ATOM, core_ops, OP_REWRITE),
+    quote=QUOTE_ATOM,
+    apply=APPLY_ATOM,
 )
 OPERATOR_LOOKUP.update(operators_for_module(KEYWORD_TO_ATOM, more_ops, OP_REWRITE))

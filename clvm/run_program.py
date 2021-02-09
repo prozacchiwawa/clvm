@@ -91,15 +91,19 @@ def run_program(
 
         if serialize_and_run_program and not pre_eval_op:
             cost, blob = serialize_and_run_program(
-                program.as_bin(), args.as_bin(), quote_kw[0], apply_kw[0], max_cost or 0
+                program.as_bin(),
+                args.as_bin(),
+                operator_lookup.quote_atom,
+                operator_lookup.apply_atom,
+                max_cost or 0,
             )
             r = sexp_from_stream(io.BytesIO(bytes(blob)), SExp.to)
         else:
             cost, r = py_run_program(
                 program,
                 args,
-                quote_kw[0],
-                apply_kw[0],
+                operator_lookup.quote_atom,
+                operator_lookup.apply_atom,
                 max_cost or 0,
                 op_lookup,
                 pre_eval=pre_eval_f,
