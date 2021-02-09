@@ -17,7 +17,7 @@ try:
     from clvm_rs import py_run_program, NativeOpLookup
 
     try:
-        from clvm_rs import serialize_and_run_program
+        from clvm_rs import serialize_and_run_program1
     except ImportError:
         serialize_and_run_program = None
 except ImportError:
