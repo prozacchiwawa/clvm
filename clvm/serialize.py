@@ -23,31 +23,18 @@ CONS_BOX_MARKER = 0xFF
 def iter_flat(*iters):
     stack = list(reversed(iters))
     while len(stack):
-        n = stack[-1]
-        if isinstance(n, bytes):
-            stack.pop()
-            yield from n
-
-        elif isinstance(n, tuple):
-            stack[-1] = n[0](n[1])
-
-        elif isinstance(n, int):
-            stack.pop()
-            yield n
-
-        elif isinstance(n, list):
-            stack.pop()
-            stack.extend(reversed(n))
-
-        elif hasattr(n, '__iter__'):
-            try:
-                stack.append(next(n))
-            except StopIteration:
-                stack.pop()
+        n = stack.pop()
+        if isinstance(n, tuple):
+            yield CONS_BOX_MARKER
+            for nn in n:
+                if isinstance(nn, bytes):
+                    yield from nn
+                else:
+                    stack.append(nn[0](nn[1]))
 
         else:
-            new_entry = n()
-            stack[-1] = new_entry
+            for nn in n:
+                yield from nn
 
 
 def sexp_to_byte_iterator(sexp):
@@ -59,9 +46,9 @@ def sexp_to_byte_iterator(sexp):
         first = pair[0]._bin if first_has else (sexp_to_byte_iterator, pair[0])
         second = pair[1]._bin if second_has else (sexp_to_byte_iterator, pair[1])
 
-        return [CONS_BOX_MARKER, first, second]
+        return (second, first)
     else:
-        return [atom_to_byte_iterator(sexp.as_atom())]
+        return atom_to_byte_iterator(sexp.as_atom())
 
 
 def atom_to_byte_iterator(as_atom):
