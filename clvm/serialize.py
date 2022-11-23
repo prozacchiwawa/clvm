@@ -20,14 +20,48 @@ MAX_SINGLE_BYTE = 0x7F
 CONS_BOX_MARKER = 0xFF
 
 
+def iter_flat(*iters):
+    stack = list(reversed(iters))
+    while len(stack):
+        n = stack[-1]
+        if isinstance(n, bytes):
+            stack.pop()
+            yield from n
+
+        elif isinstance(n, tuple):
+            stack[-1] = n[0](n[1])
+
+        elif isinstance(n, int):
+            stack.pop()
+            yield n
+
+        elif isinstance(n, list):
+            stack.pop()
+            stack.extend(reversed(n))
+
+        elif hasattr(n, '__iter__'):
+            try:
+                stack.append(next(n))
+            except StopIteration:
+                stack.pop()
+
+        else:
+            new_entry = n()
+            stack[-1] = new_entry
+
+
 def sexp_to_byte_iterator(sexp):
     pair = sexp.as_pair()
     if pair:
-        yield bytes([CONS_BOX_MARKER])
-        yield pair[0].as_bin()
-        yield pair[1].as_bin()
+        first_has = hasattr(pair[0], '_bin') and pair[0]._bin is not None
+        second_has = hasattr(pair[1], '_bin') and pair[1]._bin is not None
+
+        first = pair[0]._bin if first_has else (sexp_to_byte_iterator, pair[0])
+        second = pair[1]._bin if second_has else (sexp_to_byte_iterator, pair[1])
+
+        return [CONS_BOX_MARKER, first, second]
     else:
-        yield from atom_to_byte_iterator(sexp.as_atom())
+        return [atom_to_byte_iterator(sexp.as_atom())]
 
 
 def atom_to_byte_iterator(as_atom):
@@ -72,8 +106,7 @@ def atom_to_byte_iterator(as_atom):
 
 
 def sexp_to_stream(sexp, f):
-    for b in sexp_to_byte_iterator(sexp):
-        f.write(b)
+    f.write(bytes(iter_flat(sexp_to_byte_iterator(sexp))))
 
 
 def _op_read_sexp(op_stack, val_stack, f, to_sexp):
