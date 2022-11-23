@@ -32,8 +32,7 @@ NULL = b""
 
 
 def looks_like_clvm_object(o: typing.Any) -> bool:
-    d = dir(o)
-    return "atom" in d and "pair" in d
+    return hasattr(o, "atom") and hasattr(o, "pair")
 
 
 # this function recognizes some common types and turns them into plain bytes,
@@ -57,64 +56,29 @@ def convert_atom_to_bytes(
     raise ValueError("can't cast %s (%s) to bytes" % (type(v), v))
 
 
-# returns a clvm-object like object
 def to_sexp_type(
     v: CastableType,
 ):
-    stack = [v]
-    ops = [(0, None)]  # convert
 
-    while len(ops) > 0:
-        op, target = ops.pop()
-        # convert value
-        if op == 0:
-            if looks_like_clvm_object(stack[-1]):
-                continue
-            v = stack.pop()
-            if isinstance(v, tuple):
-                if len(v) != 2:
-                    raise ValueError("can't cast tuple of size %d" % len(v))
-                left, right = v
-                target = len(stack)
-                stack.append(CLVMObject((left, right)))
-                if not looks_like_clvm_object(right):
-                    stack.append(right)
-                    ops.append((2, target))  # set right
-                    ops.append((0, None))  # convert
-                if not looks_like_clvm_object(left):
-                    stack.append(left)
-                    ops.append((1, target))  # set left
-                    ops.append((0, None))  # convert
-                continue
-            if isinstance(v, list):
-                target = len(stack)
-                stack.append(CLVMObject(NULL))
-                for _ in v:
-                    stack.append(_)
-                    ops.append((3, target))  # prepend list
-                    # we only need to convert if it's not already the right
-                    # type
-                    if not looks_like_clvm_object(_):
-                        ops.append((0, None))  # convert
-                continue
-            stack.append(CLVMObject(convert_atom_to_bytes(v)))
-            continue
+    if isinstance(v, (SExp, CLVMObject)):
+        return v
 
-        if op == 1:  # set left
-            stack[target].pair = (CLVMObject(stack.pop()), stack[target].pair[1])
-            continue
-        if op == 2:  # set right
-            stack[target].pair = (stack[target].pair[0], CLVMObject(stack.pop()))
-            continue
-        if op == 3:  # prepend list
-            stack[target] = CLVMObject((stack.pop(), stack[target]))
-            continue
-    # there's exactly one item left at this point
-    if len(stack) != 1:
-        raise ValueError("internal error")
+    if isinstance(v, tuple):
+        return CLVMObject((
+            to_sexp_type(v[0]),
+            to_sexp_type(v[1]),
+        ))
 
-    # stack[0] implements the clvm object protocol and can be wrapped by an SExp
-    return stack[0]
+    if isinstance(v, list):
+        if len(v):
+            return CLVMObject((
+                to_sexp_type(v[0]),
+                to_sexp_type(v[1:]),
+            ))
+        else:
+            return CLVMObject(NULL)
+
+    return CLVMObject(convert_atom_to_bytes(v))
 
 
 class SExp:
@@ -142,16 +106,18 @@ class SExp:
     # SExp objects with higher level functions, or None
     pair: typing.Optional[typing.Tuple[typing.Any, typing.Any]]
 
-    def __init__(self, obj):
+    def __init__(self, obj, _bin=None):
         self.atom = obj.atom
         self.pair = obj.pair
+
+        self._bin = _bin
 
     # this returns a tuple of two SExp objects, or None
     def as_pair(self) -> typing.Tuple["SExp", "SExp"]:
         pair = self.pair
         if pair is None:
             return pair
-        return (self.__class__(pair[0]), self.__class__(pair[1]))
+        return (self.to(pair[0]), self.to(pair[1]))
 
     # TODO: deprecate this. Same as .atom property
     def as_atom(self):
@@ -168,9 +134,12 @@ class SExp:
         return int_from_bytes(self.atom)
 
     def as_bin(self):
-        f = io.BytesIO()
-        sexp_to_stream(self, f)
-        return f.getvalue()
+        if self._bin is None:
+            f = io.BytesIO()
+            sexp_to_stream(self, f)
+            self._bin = f.getvalue()
+
+        return self._bin
 
     @classmethod
     def to(class_, v: CastableType) -> "SExp":
@@ -189,13 +158,13 @@ class SExp:
     def first(self):
         pair = self.pair
         if pair:
-            return self.__class__(pair[0])
+            return self.to(pair[0])
         raise EvalError("first of non-cons", self)
 
     def rest(self):
         pair = self.pair
         if pair:
-            return self.__class__(pair[1])
+            return self.to(pair[1])
         raise EvalError("rest of non-cons", self)
 
     @classmethod
@@ -210,21 +179,7 @@ class SExp:
 
     def __eq__(self, other: CastableType):
         try:
-            other = self.to(other)
-            to_compare_stack = [(self, other)]
-            while to_compare_stack:
-                s1, s2 = to_compare_stack.pop()
-                p1 = s1.as_pair()
-                if p1:
-                    p2 = s2.as_pair()
-                    if p2:
-                        to_compare_stack.append((p1[0], p2[0]))
-                        to_compare_stack.append((p1[1], p2[1]))
-                    else:
-                        return False
-                elif s2.as_pair() or s1.as_atom() != s2.as_atom():
-                    return False
-            return True
+            return self.as_bin() == self.to(other).as_bin()
         except ValueError:
             return False
 
