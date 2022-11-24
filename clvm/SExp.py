@@ -12,7 +12,7 @@ from .casts import (
     int_from_bytes,
     int_to_bytes,
 )
-from .serialize import sexp_to_stream
+from .serialize import RECURSION_DEPTH, sexp_to_stream
 
 
 CastableType = typing.Union[
@@ -120,7 +120,7 @@ def to_sexp_type(
     count = 0
 ):
 
-    if count > 200:
+    if count > RECURSION_DEPTH:
         return slow_to_sexp_type(v)
 
     if isinstance(v, (SExp, CLVMObject)):
@@ -194,10 +194,10 @@ class SExp:
     def as_int(self):
         return int_from_bytes(self.atom)
 
-    def as_bin(self):
+    def as_bin(self, depth = 0):
         if self._bin is None:
             f = io.BytesIO()
-            sexp_to_stream(self, f)
+            sexp_to_stream(self, f, depth)
             self._bin = f.getvalue()
 
         return self._bin

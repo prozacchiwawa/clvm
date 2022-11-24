@@ -18,33 +18,34 @@ from .CLVMObject import CLVMObject
 
 MAX_SINGLE_BYTE = 0x7F
 CONS_BOX_MARKER = 0xFF
+RECURSION_DEPTH = 50
 
+def sexp_to_byte_iterator(sexp, depth = 0):
+    if depth < RECURSION_DEPTH:
+        pair = sexp.as_pair()
+        if pair:
+            yield bytes([CONS_BOX_MARKER])
+            yield pair[0].as_bin(depth + 1)
+            yield pair[1].as_bin(depth + 1)
+        else:
+            yield from atom_to_byte_iterator(sexp.as_atom())
 
-def sexp_to_byte_iterator(sexp):
-    stack = [sexp]
-    try:
-        while True:
-            nn = stack.pop()
-            if isinstance(nn, bytes):
-                yield from nn
-            else:
-                pair = nn.as_pair()
-                if pair:
-                    yield CONS_BOX_MARKER
-                    first_has = hasattr(pair[0], '_bin') and pair[0]._bin is not None
-                    second_has = hasattr(pair[1], '_bin') and pair[1]._bin is not None
-
-                    first = pair[0].as_bin() if first_has else pair[0]
-                    second = pair[1].as_bin() if second_has else pair[1]
-
-                    stack.append(second)
-                    stack.append(first)
-                else:
-                    for by in atom_to_byte_iterator(nn.as_atom()):
-                        yield from by
-    except:
         return
 
+    stack = [sexp]
+    while True:
+        try:
+            while True:
+                nn = stack.pop()
+                for by in atom_to_byte_iterator(nn.as_atom()):
+                    yield by
+        except IndexError:
+            break
+        except TypeError:
+            pair = nn.as_pair()
+            stack.append(pair[1])
+            stack.append(pair[0])
+            yield bytes([CONS_BOX_MARKER])
 
 def atom_to_byte_iterator(as_atom):
     size = len(as_atom)
@@ -87,8 +88,9 @@ def atom_to_byte_iterator(as_atom):
     yield as_atom
 
 
-def sexp_to_stream(sexp, f):
-    f.write(bytes(sexp_to_byte_iterator(sexp)))
+def sexp_to_stream(sexp, f, depth = 0):
+    for by in sexp_to_byte_iterator(sexp, depth):
+        f.write(by)
 
 
 def _op_read_sexp(op_stack, val_stack, f, to_sexp):
