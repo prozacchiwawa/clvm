@@ -20,35 +20,30 @@ MAX_SINGLE_BYTE = 0x7F
 CONS_BOX_MARKER = 0xFF
 
 
-def iter_flat(*iters):
-    stack = list(reversed(iters))
-    while len(stack):
-        n = stack.pop()
-        if isinstance(n, tuple):
-            yield CONS_BOX_MARKER
-            for nn in n:
-                if isinstance(nn, bytes):
-                    yield from nn
-                else:
-                    stack.append(nn[0](nn[1]))
-
-        else:
-            for nn in n:
-                yield from nn
-
-
 def sexp_to_byte_iterator(sexp):
-    pair = sexp.as_pair()
-    if pair:
-        first_has = hasattr(pair[0], '_bin') and pair[0]._bin is not None
-        second_has = hasattr(pair[1], '_bin') and pair[1]._bin is not None
+    stack = [sexp]
+    try:
+        while True:
+            nn = stack.pop()
+            if isinstance(nn, bytes):
+                yield from nn
+            else:
+                pair = nn.as_pair()
+                if pair:
+                    yield CONS_BOX_MARKER
+                    first_has = hasattr(pair[0], '_bin') and pair[0]._bin is not None
+                    second_has = hasattr(pair[1], '_bin') and pair[1]._bin is not None
 
-        first = pair[0]._bin if first_has else (sexp_to_byte_iterator, pair[0])
-        second = pair[1]._bin if second_has else (sexp_to_byte_iterator, pair[1])
+                    first = pair[0].as_bin() if first_has else pair[0]
+                    second = pair[1].as_bin() if second_has else pair[1]
 
-        return (second, first)
-    else:
-        return atom_to_byte_iterator(sexp.as_atom())
+                    stack.append(second)
+                    stack.append(first)
+                else:
+                    for by in atom_to_byte_iterator(nn.as_atom()):
+                        yield from by
+    except:
+        return
 
 
 def atom_to_byte_iterator(as_atom):
@@ -93,7 +88,7 @@ def atom_to_byte_iterator(as_atom):
 
 
 def sexp_to_stream(sexp, f):
-    f.write(bytes(iter_flat(sexp_to_byte_iterator(sexp))))
+    f.write(bytes(sexp_to_byte_iterator(sexp)))
 
 
 def _op_read_sexp(op_stack, val_stack, f, to_sexp):
